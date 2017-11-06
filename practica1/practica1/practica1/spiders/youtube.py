@@ -6,7 +6,8 @@ import csv
 from scrapy.http import HtmlResponse
 from scrapy import signals
 from scrapy.xlib.pydispatch import dispatcher
-
+from textblob import TextBlob
+import nltk
 class YoutubeSpider(scrapy.Spider):
     name = 'youtube'
     start_urls = ['https://www.youtube.com/results?search_query=']
@@ -78,16 +79,16 @@ class YoutubeSpider(scrapy.Spider):
         likes = response.xpath('//div[contains(@class, "video-extras-sparkbar-likes")]/@style').extract_first()
         dislikes = response.xpath('//div[contains(@class, "video-extras-sparkbar-dislikes")]/@style').extract_first()
         likesNum = response.xpath('//span[contains(@class, "yt-uix-clickcard")]/*/span[contains(@class, "yt-uix-button-content")]').extract()
-        data['plikes'] = None if likes is None else likes.split(':')[1].split('%')[0] if ':' in likes and '%' in likes else None
-        data['pdislikes'] = None if dislikes is None else dislikes.split(':')[1].split('%')[0] if ':' in dislikes and '%' in dislikes else None
+        data['plikes'] = None if likes is None else likes.split(':')[1].split('%')[0].strip() if ':' in likes and '%' in likes else None
+        data['pdislikes'] = None if dislikes is None else dislikes.split(':')[1].split('%')[0].strip() if ':' in dislikes and '%' in dislikes else None
         if len(likesNum) > 4:
             likesNum, dislikesNum = likesNum[1], likesNum[3]
             likesNum = HtmlResponse(url='', body=likesNum, encoding='utf-8')
             likesNum = likesNum.xpath('//span/text()').extract_first()
             dislikesNum = HtmlResponse(url='', body=dislikesNum, encoding='utf-8')
             dislikesNum = dislikesNum.xpath('//span/text()').extract_first()
-            data['likes'] = likesNum
-            data['dislikes'] = dislikesNum
+            data['likes'] = likesNum.strip()
+            data['dislikes'] = dislikesNum.strip()
         else:
             likesNum, dislikesNum = None, None
             data['likes'] = likesNum
@@ -97,6 +98,14 @@ class YoutubeSpider(scrapy.Spider):
         return
 
     def end(self):
+        for data in self.collectedData:
+            try:
+                txtBlob = TextBlob(data.get('title', ''))
+                data['sentimentPolarity'] = txtBlob.sentiment.polarity
+                data['sentimentSubjectivity'] = txtBlob.sentiment.subjectivity
+            except:
+                data['sentimentPolarity'] = None
+                data['sentimentSubjectivity'] = None
         self.toCSV(self.collectedData, 'cocacola')
 
     '''
